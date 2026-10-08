@@ -1,0 +1,12 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%-- conexion.jspf - Configuración de DataSource MySQL para JSTL SQL --%>
+<fmt:requestEncoding value="UTF-8"/>
+<sql:setDataSource
+  driver="com.mysql.cj.jdbc.Driver"
+  url="jdbc:mysql://localhost:3306/sigrado?useSSL=false&serverTimezone=America/Bogota&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8"
+  user="root"
+  password=""
+  var="db"
+  scope="application"
+/>
+<fmt:setLocale value="es_CO" scope="page" />

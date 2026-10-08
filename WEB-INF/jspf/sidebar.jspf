@@ -1,0 +1,246 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ taglib prefix="c"   uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="sql" uri="http://java.sun.com/jsp/jstl/sql" %>
+<%@ taglib prefix="fn"  uri="http://java.sun.com/jsp/jstl/functions" %>
+
+<%-- sidebar.jspf - Menú lateral institucional dinámico según Matriz de Visibilidad por Rol --%>
+<c:set var="roles" value="${sessionScope.roles}" scope="page"/>
+<%-- Menú según el rol activo elegido al ingresar; sin elección, según todos los roles del usuario --%>
+<c:set var="rolVista" value="${not empty sessionScope.rol_activo ? sessionScope.rol_activo : ''}" scope="page"/>
+<c:set var="tieneAdmin"       value="${not empty rolVista ? rolVista == 'administrador' : fn:contains(roles,'administrador')}"/>
+<c:set var="tieneComite"      value="${not empty rolVista ? rolVista == 'comite' : fn:contains(roles,'comite')}"/>
+<c:set var="tieneDocente"     value="${not empty rolVista ? rolVista == 'docente' : fn:contains(roles,'docente')}"/>
+<c:set var="tieneEstudiante"  value="${not empty rolVista ? rolVista == 'estudiante' : fn:contains(roles,'estudiante')}"/>
+<c:set var="esSoloEstudiante" value="${tieneEstudiante and not tieneAdmin and not tieneComite and not tieneDocente}"/>
+<c:set var="esSoloDocente"    value="${tieneDocente and not tieneAdmin and not tieneComite}"/>
+<c:set var="currentUri"       value="${pageContext.request.requestURI}"/>
+
+<%-- Badges de pendientes --%>
+<c:if test="${not empty sessionScope.usuario_id}">
+  <c:catch var="errBadges">
+    <c:if test="${tieneDocente}">
+      <sql:query dataSource="${db}" var="pendientesDoc">
+        SELECT 
+          SUM(CASE WHEN director_id = ? AND responsable = 'director' AND (fase = 2 OR fase = 4) THEN 1 ELSE 0 END) AS dir_pendientes,
+          SUM(CASE WHEN evaluador_id = ? AND responsable = 'evaluador' AND (fase = 3 OR fase = 5) THEN 1 ELSE 0 END) AS eval_pendientes
+        FROM proyectos WHERE estado = 'En curso'
+        <sql:param value="${sessionScope.usuario_id}"/>
+        <sql:param value="${sessionScope.usuario_id}"/>
+      </sql:query>
+      <c:set var="numDir"  value="${empty pendientesDoc.rows[0].dir_pendientes  ? 0 : pendientesDoc.rows[0].dir_pendientes}"/>
+      <c:set var="numEval" value="${empty pendientesDoc.rows[0].eval_pendientes ? 0 : pendientesDoc.rows[0].eval_pendientes}"/>
+    </c:if>
+
+    <c:if test="${tieneComite or tieneAdmin}">
+      <sql:query dataSource="${db}" var="pendientesComite">
+        SELECT 
+          (SELECT COUNT(*) FROM proyectos WHERE responsable='comite' AND estado='En curso') AS proy_pendientes,
+          (SELECT COUNT(*) FROM propuestas_banco WHERE estado='Pendiente') AS banco_pendientes
+      </sql:query>
+      <c:set var="numComiteProy"  value="${empty pendientesComite.rows[0].proy_pendientes  ? 0 : pendientesComite.rows[0].proy_pendientes}"/>
+      <c:set var="numComiteBanco" value="${empty pendientesComite.rows[0].banco_pendientes ? 0 : pendientesComite.rows[0].banco_pendientes}"/>
+    </c:if>
+  </c:catch>
+</c:if>
+
+<button class="sidebar-float-toggle" id="sidebarFloatToggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">
+  <i class="fas fa-bars"></i>
+</button>
+<div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+<aside class="sidebar" id="sidebar" aria-label="Menú principal">
+  <div class="brand-header">
+    <div class="brand-logo">UTS</div>
+    <div class="brand-title">
+      SIGRADO
+      <div style="font-size: 0.72rem; color: #6c757d; font-weight: normal;">Trabajos de Grado</div>
+    </div>
+  </div>
+
+  <div class="sidebar-nav">
+
+    <%-- 1. INICIO (Todos los roles) --%>
+    <a href="${pageContext.request.contextPath}/inicio.jsp"
+       class="sidebar-link ${fn:contains(currentUri,'/inicio') ? 'active' : ''}"
+       title="Inicio">
+      <i class="fas fa-home"></i> <span>Inicio</span>
+    </a>
+
+    <%-- 2. MI PERFIL (Todos los roles) --%>
+    <a href="${pageContext.request.contextPath}/perfil.jsp"
+       class="sidebar-link ${fn:contains(currentUri,'/perfil') ? 'active' : ''}"
+       title="Mi perfil">
+      <i class="fas fa-user-circle"></i> <span>Mi perfil</span>
+    </a>
+
+    <%-- 3. USUARIOS (Administrador y Comité) --%>
+    <c:if test="${tieneAdmin or tieneComite}">
+      <a href="${pageContext.request.contextPath}/comite/usuarios.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/usuarios') ? 'active' : ''}"
+         title="Gestión de Usuarios">
+        <i class="fas fa-users-cog"></i> <span>Usuarios</span>
+      </a>
+    </c:if>
+
+    <%-- 4. BANCO DE IDEAS --%>
+    <c:choose>
+      <c:when test="${tieneAdmin}">
+        <%-- Admin: gestiona el banco --%>
+        <a href="${pageContext.request.contextPath}/administrador/banco.jsp"
+           class="sidebar-link ${fn:contains(currentUri,'/administrador/banco') ? 'active' : ''}"
+           title="Banco de ideas">
+          <i class="fas fa-lightbulb"></i> <span>Banco de ideas</span>
+          <c:if test="${numComiteBanco > 0}">
+            <span class="badge bg-warning text-dark rounded-pill ms-auto">${numComiteBanco}</span>
+          </c:if>
+        </a>
+      </c:when>
+      <c:when test="${tieneComite}">
+        <%-- Comité: consulta del banco --%>
+        <a href="${pageContext.request.contextPath}/comite/banco.jsp"
+           class="sidebar-link ${fn:contains(currentUri,'/comite/banco') ? 'active' : ''}"
+           title="Banco de ideas">
+          <i class="fas fa-lightbulb"></i> <span>Banco de ideas</span>
+        </a>
+      </c:when>
+      <c:when test="${tieneDocente}">
+        <%-- Docente: ve ideas aprobadas --%>
+        <a href="${pageContext.request.contextPath}/docente/banco.jsp"
+           class="sidebar-link ${fn:contains(currentUri,'/docente/banco') ? 'active' : ''}"
+           title="Banco de ideas">
+          <i class="fas fa-lightbulb"></i> <span>Banco de ideas</span>
+        </a>
+      </c:when>
+      <c:when test="${tieneEstudiante}">
+        <%-- Estudiante: elige o propone ideas --%>
+        <a href="${pageContext.request.contextPath}/estudiante/banco.jsp"
+           class="sidebar-link ${fn:contains(currentUri,'/estudiante/banco') ? 'active' : ''}"
+           title="Banco de ideas">
+          <i class="fas fa-lightbulb"></i> <span>Banco de ideas</span>
+        </a>
+      </c:when>
+    </c:choose>
+
+    <%-- 5. PROPUESTAS BANCO (Docente, Comité y Admin) --%>
+    <c:if test="${tieneDocente and not tieneAdmin and not tieneComite}">
+      <a href="${pageContext.request.contextPath}/docente/propuestas_banco.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/propuestas_banco') ? 'active' : ''}"
+         title="Propuestas Banco">
+        <i class="fas fa-file-alt"></i> <span>Propuestas Banco</span>
+      </a>
+    </c:if>
+    <c:if test="${tieneComite and not tieneAdmin}">
+      <a href="${pageContext.request.contextPath}/comite/propuestas_banco.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/comite/propuestas_banco') ? 'active' : ''}"
+         title="Propuestas Banco">
+        <i class="fas fa-file-alt"></i> <span>Propuestas Banco</span>
+        <c:if test="${numComiteBanco > 0}">
+          <span class="badge bg-warning text-dark rounded-pill ms-auto">${numComiteBanco}</span>
+        </c:if>
+      </a>
+    </c:if>
+    <c:if test="${tieneAdmin}">
+      <a href="${pageContext.request.contextPath}/administrador/propuestas_banco.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/administrador/propuestas_banco') ? 'active' : ''}"
+         title="Propuestas Banco">
+        <i class="fas fa-file-alt"></i> <span>Propuestas Banco</span>
+        <c:if test="${numComiteBanco > 0}">
+          <span class="badge bg-warning text-dark rounded-pill ms-auto">${numComiteBanco}</span>
+        </c:if>
+      </a>
+    </c:if>
+
+    <%-- 6. PROYECTOS DE GRADO (Admin, Comité) --%>
+    <c:if test="${tieneAdmin}">
+      <a href="${pageContext.request.contextPath}/administrador/proyectos.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/administrador/proyectos') ? 'active' : ''}"
+         title="Proyectos de grado">
+        <i class="fas fa-project-diagram"></i> <span>Proyectos de grado</span>
+        <c:if test="${numComiteProy > 0}">
+          <span class="badge bg-danger rounded-pill ms-auto">${numComiteProy}</span>
+        </c:if>
+      </a>
+    </c:if>
+    <c:if test="${tieneComite and not tieneAdmin}">
+      <a href="${pageContext.request.contextPath}/comite/proyectos.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/comite/proyectos') ? 'active' : ''}"
+         title="Proyectos de grado">
+        <i class="fas fa-project-diagram"></i> <span>Proyectos de grado</span>
+        <c:if test="${numComiteProy > 0}">
+          <span class="badge bg-danger rounded-pill ms-auto">${numComiteProy}</span>
+        </c:if>
+      </a>
+    </c:if>
+
+    <%-- 7. MI PROYECTO (Solo Estudiante) --%>
+    <c:if test="${tieneEstudiante}">
+      <a href="${pageContext.request.contextPath}/estudiante/proyecto.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/estudiante/proyecto') or fn:contains(currentUri,'/estudiante/seguimiento') ? 'active' : ''}"
+         title="Mi proyecto">
+        <i class="fas fa-graduation-cap"></i> <span>Mi proyecto</span>
+      </a>
+    </c:if>
+
+    <%-- 8. DOCENTE DIRECTOR (Solo Docente) --%>
+    <c:if test="${tieneDocente}">
+      <a href="${pageContext.request.contextPath}/docente/director.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/docente/director') ? 'active' : ''}"
+         title="Docente Director">
+        <i class="fas fa-chalkboard-teacher"></i> <span>Docente Director</span>
+        <c:if test="${numDir > 0}">
+          <span class="badge bg-danger rounded-pill ms-auto">${numDir}</span>
+        </c:if>
+      </a>
+
+      <%-- 9. DOCENTE EVALUADOR --%>
+      <a href="${pageContext.request.contextPath}/docente/evaluador.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/docente/evaluador') ? 'active' : ''}"
+         title="Docente Evaluador">
+        <i class="fas fa-clipboard-check"></i> <span>Docente Evaluador</span>
+        <c:if test="${numEval > 0}">
+          <span class="badge bg-danger rounded-pill ms-auto">${numEval}</span>
+        </c:if>
+      </a>
+
+      <%-- 9b. CODIRECTOR (solo consulta) --%>
+      <a href="${pageContext.request.contextPath}/docente/codirector.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/docente/codirector') ? 'active' : ''}"
+         title="Codirector (consulta)">
+        <i class="fas fa-user-friends"></i> <span>Codirector</span>
+      </a>
+    </c:if>
+
+    <%-- 10. CALENDARIO ACADÉMICO (Admin, Comité) --%>
+    <c:if test="${tieneAdmin or tieneComite}">
+      <a href="${pageContext.request.contextPath}/comun/calendario.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/calendario') ? 'active' : ''}"
+         title="Calendario académico">
+        <i class="fas fa-calendar-alt"></i> <span>Calendario académico</span>
+      </a>
+    </c:if>
+
+    <%-- 11. FORMATOS DE GRADO (Admin, Comité) --%>
+    <c:if test="${tieneAdmin or tieneComite}">
+      <a href="${pageContext.request.contextPath}/comun/formatos.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/formatos') ? 'active' : ''}"
+         title="Formatos de grado">
+        <i class="fas fa-file-pdf"></i> <span>Formatos de grado</span>
+      </a>
+    </c:if>
+
+    <%-- 12. CONFIGURACIÓN (Solo Admin) --%>
+    <c:if test="${tieneAdmin}">
+      <a href="${pageContext.request.contextPath}/administrador/configuracion.jsp"
+         class="sidebar-link ${fn:contains(currentUri,'/configuracion') ? 'active' : ''}"
+         title="Configuración">
+        <i class="fas fa-sliders-h"></i> <span>Configuración</span>
+      </a>
+    </c:if>
+
+    <div class="sidebar-section mt-3">Sesión</div>
+    <a href="${pageContext.request.contextPath}/logout.jsp" class="sidebar-link text-danger" title="Cerrar sesión">
+      <i class="fas fa-sign-out-alt text-danger"></i> <span>Cerrar sesión</span>
+    </a>
+
+  </div>
+</aside>
